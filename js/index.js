@@ -135,6 +135,15 @@ const runLumaConversion = () => {
   console.log(performance.now() - start);
 };
 
+const runHalftoneConversion = () => {
+  const { wasm, canvases: { source, target } } = model;
+
+  const start = performance.now();
+  wasm.run_density_pattern_halftone(source, target);
+  console.log(performance.now() - start);
+};
+
+
 const drawImage = (image) => {
   const { source, sourceCtx } = model.canvases;
   source.width = image.naturalWidth;
@@ -179,6 +188,7 @@ const main = (wasm, memory) => {
       source: document.getElementById('sourceCanvas'),
       target: document.getElementById('targetCanvas'),
       sourceCtx: null,
+      targetCtx: null,
     },
     convolveButton: document.getElementById('convolveButton'),
     copyButton: document.getElementById('copyButton'),
@@ -189,6 +199,7 @@ const main = (wasm, memory) => {
   model.kernel = generateKernel();
   model.customKernel = generateKernelFromFunction(model.kernelSize, () => 0);
   model.canvases.sourceCtx = model.canvases.source.getContext('2d');
+  model.canvases.targetCtx = model.canvases.target.getContext('2d');
   model.sigma = model.kernelSize / 2;
 
   drawDefaultImage();
@@ -248,6 +259,11 @@ const main = (wasm, memory) => {
   const lumaButton = document.getElementById('lumaButton');
   lumaButton.addEventListener('click', () => {
     setTimeout(runLumaConversion, 0);
+  });
+
+  const halftoneButton = document.getElementById('halftoneButton');
+  halftoneButton.addEventListener('click', () => {
+    setTimeout(runHalftoneConversion, 0);
   });
 
   const normalizeButton = document.getElementById('normalizeButton');

@@ -3,11 +3,19 @@ extern crate cfg_if;
 extern crate js_sys;
 extern crate wasm_bindgen;
 extern crate web_sys;
+#[macro_use]
+extern crate lazy_static;
 
 use js_sys::Object;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
+
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
 
 cfg_if! {
     // When the `console_error_panic_hook` feature is enabled, we can call the
@@ -104,7 +112,7 @@ pub fn convolve(source: Vec<u8>, w: u32, h: u32, kernel: &Kernel) -> Vec<u8> {
 
 // c.f. https://en.wikipedia.org/wiki/Luma_%28video%29
 pub fn luma_convert(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
-    let mut target = Vec::with_capacity(source.len() * 4);
+    let mut target = Vec::with_capacity(source.len());
 
     for y in 0..h {
         for x in 0..w {
@@ -121,14 +129,47 @@ pub fn luma_convert(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
     target
 }
 
-//const DENSITY_PATTERN: [u8; 16] = [10, 2, 8, 5, 15, 7, 13, 1, 11, 3, 9, 4, 6, 14, 12, 0];
-//
-//fn get_density_pattern(index: usize) -> u16 {
-//    if index == 0 {
-//        return 0;
-//    }
-//   (0..(index - 1)).map(|i| 1 << DENSITY_PATTERN[i]).sum()
-//}
+lazy_static! {
+    static ref DENSITY_PATTERNS: [u16; 17] = {
+        let pattern_nums = [10, 2, 8, 5, 15, 7, 13, 1, 11, 3, 9, 4, 6, 14, 12, 0];
+        let mut ret = [0; 17];
+        for i in 1..17 {
+            ret[i] = ret[i - 1] + (1 << pattern_nums[i - 1]);
+        }
+        ret
+    };
+}
+
+pub fn density_pattern_halftone(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
+    let mut target = vec![0; source.len() * 16];
+
+    for y in 0..h {
+        for x in 0..w {
+            let source_base_index = ((y * w + x) * 4) as usize;
+            let luma_value = ((source[source_base_index] as f32) * 0.2126
+                + (source[source_base_index + 1] as f32) * 0.7152
+                + (source[source_base_index + 2] as f32) * 0.0722)
+                as u8;
+            // this converts 0~255 to 0~17
+            let density_pattern = DENSITY_PATTERNS[(luma_value as f32 / 16.0).round() as usize];
+            for dy in 0..4 {
+                for dx in 0..4 {
+                    let color_value = if density_pattern & (1 << (dy * 4 + dx)) != 0 {
+                        255
+                    } else {
+                        0
+                    };
+                    let target_base_index = (((y * 4 + dy) * (w * 4) + x * 4 + dx) * 4) as usize;
+                    target[target_base_index] = color_value;
+                    target[target_base_index + 1] = color_value;
+                    target[target_base_index + 2] = color_value;
+                    target[target_base_index + 3] = source[source_base_index + 3];
+                }
+            }
+        }
+    }
+    target
+}
 
 #[wasm_bindgen]
 pub fn init() {
@@ -183,4 +224,15 @@ pub fn run_luma_conversion(
     run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
         (luma_convert(vec, w, h), w, h)
     })
+}
+
+#[wasm_bindgen]
+pub fn run_density_pattern_halftone(
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
+) -> Result<(), JsValue> {
+    let result = run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        (density_pattern_halftone(vec, w, h), w * 4, h * 4)
+    });
+    result
 }
