@@ -314,7 +314,7 @@ const main = (wasm, memory) => {
 };
 
 Promise.all([
-  import("../crate/pkg"),
+  import("../crate/pkg/simple_image_editor"),
   import("../crate/pkg/simple_image_editor_bg")
 ]).then(([module, { memory }]) => {
   module.init();
