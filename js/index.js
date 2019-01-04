@@ -9,7 +9,6 @@ const generateKernelFromFunction = (kernelSize, f) => {
 };
 
 const generateZeroKernel = (kernelSize) => {
-  console.log(kernelSize);
   return generateKernelFromFunction(kernelSize, () => 0);
 };
 
@@ -98,7 +97,7 @@ const applyKernel = (kernel, kernelSize) => {
   const flatKernel = R.unnest(kernel);
 
   const kernelHandle = wasm.Kernel.new(kernelSize);
-  const contents =new Float32Array(memory.buffer, kernelHandle.content(), kernelSize**2);
+  const contents = new Float32Array(memory.buffer, kernelHandle.content(), kernelSize**2);
   for (let i = 0; i < kernelSize**2; i++) {
     contents[i] = flatKernel[i];
   }
@@ -282,7 +281,7 @@ const main = (wasm, memory) => {
 
 Promise.all([
   import("../crate/pkg"),
-  import("../crate/pkg/rust_webpack_bg")
+  import("../crate/pkg/simple_image_editor_bg")
 ]).then(([module, { memory }]) => {
   module.init();
   main(module, memory);
