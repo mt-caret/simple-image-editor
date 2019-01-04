@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>image editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css" integrity="sha256-2pUeJf+y0ltRPSbKOeJh09ipQFYxUdct5nTY6GAXswA=" crossorigin="anonymous" />
+    <style>
+canvas {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+    </style>
+  </head>
+  <body>
+    <section class="section"><div class="container">
+      <div class="box">
+        <div class="columns">
+          <div class="column is-half">
+            <label class="label" for="sourceCanvas">Source:</label>
+            <canvas id="sourceCanvas"></canvas>
+          </div>
+          <div class="column is-half">
+            <label class="label" for="targetCanvas">Result:</label>
+            <canvas id="targetCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="field is-grouped is-grouped-multiline">
+          <div class="control">
+            <button id="convolveButton" class="button is-primary">Convolve</button>
+          </div>
+          <div class="control">
+            <button id="copyButton" class="button" disabled>Copy Result to Source</button>
+          </div>
+          <div class="control">
+            <button id="downloadButton" class="button" disabled>Download Result</button>
+          </div>
+          <div class="control">
+            <button id="lumaButton" class="button">Convert to Grayscale (Luma)</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="file has-name is-fullwidth">
+            <label class="file-label">
+              <input class="file-input" type="file" id="imageLoader" name="imageLoader">
+              <span class="file-cta">
+                <span class="file-label">
+                  Choose an image...
+                </span>
+              </span>
+              <span id="file-name" class="file-name"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label">Kernel Size</label>
+          <div class="control">
+             <input id="kernelSizeInput" class="input" type="text">
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label">Kernel</label>
+          <table id="kernelTable" class="table is-bordered">
+          </table>
+        </div>
+
+        <div class="field is-grouped is-grouped-multiline">
+          <div class="control">
+            <button id="normalizeButton" class="button">Normalize</button>
+          </div>
+          <div class="control">
+            <button id="zeroButton" class="button" disabled>Zero Out</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label">Filter</label>
+          <div class="control">
+            <label class="radio">
+              <input id="averagingKernel" type="radio" name="kernel">
+              Averaging
+            </label>
+            <label class="radio">
+              <input id="gaussianKernel" type="radio" name="kernel">
+              Gaussian
+            </label>
+            <label class="radio">
+              <input id="derivativeKernel" type="radio" name="kernel">
+              Derivative
+            </label>
+            <label class="radio">
+              <input id="prewittKernel" type="radio" name="kernel">
+              Prewitt
+            </label>
+            <label class="radio">
+              <input id="sobelKernel" type="radio" name="kernel">
+              Sobel
+            </label>
+            <label class="radio">
+              <input id="customKernel" type="radio" name="kernel">
+              Custom
+            </label>
+          </div>
+        </div>
+
+        <div class="field is-grouped is-grouped-multiline">
+          <div class="control">
+            <label class="checkbox">
+              <input id="isVerticalCheckbox" type="checkbox">
+              Vertical
+            </label>
+          </div>
+          <div class="control">
+             <input id="sigmaInput" class="input" type="text">
+          </div>
+        </div>
+      </div>
+    </div></section>
+  </body>
+</html>
