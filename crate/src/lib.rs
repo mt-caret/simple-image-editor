@@ -6,7 +6,7 @@ extern crate web_sys;
 #[macro_use]
 extern crate lazy_static;
 
-use js_sys::Object;
+use js_sys::{Array, Object};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
@@ -171,6 +171,44 @@ pub fn density_pattern_halftone(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
     target
 }
 
+pub fn dither_halftone(
+    source: Vec<u8>,
+    w: u32,
+    h: u32,
+    pattern: Vec<u8>,
+    pattern_size: usize,
+) -> (Vec<u8>, u32, u32) {
+    let (w, h) = (
+        w as usize / pattern_size * pattern_size,
+        h as usize / pattern_size * pattern_size,
+    );
+    let mut target = vec![0; w * h * 4];
+
+    for y in 0..(h / pattern_size) {
+        for x in 0..(w / pattern_size) {
+            for dy in 0..pattern_size {
+                for dx in 0..pattern_size {
+                    let index = ((y * pattern_size + dy) * w + x * pattern_size + dx) * 4;
+                    let luma_value = ((source[index] as f32) * 0.2126
+                        + (source[index + 1] as f32) * 0.7152
+                        + (source[index + 2] as f32) * 0.0722)
+                        as u8;
+                    let color_value = if pattern[dy * 4 + dx] * 16 + 8 < luma_value {
+                        255
+                    } else {
+                        0
+                    };
+                    target[index] = color_value;
+                    target[index + 1] = color_value;
+                    target[index + 2] = color_value;
+                    target[index + 3] = source[index + 3];
+                }
+            }
+        }
+    }
+    (target, w as u32, h as u32)
+}
+
 #[wasm_bindgen]
 pub fn init() {
     set_panic_hook();
@@ -231,8 +269,28 @@ pub fn run_density_pattern_halftone(
     src_canvas: &HtmlCanvasElement,
     target_canvas: &HtmlCanvasElement,
 ) -> Result<(), JsValue> {
-    let result = run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
         (density_pattern_halftone(vec, w, h), w * 4, h * 4)
-    });
-    result
+    })
+}
+
+#[wasm_bindgen]
+pub fn run_dither_halftone(
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
+    dither_pattern_array: &Array,
+) -> Result<(), JsValue> {
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        let dither_pattern: Vec<_> = dither_pattern_array
+            .values()
+            .into_iter()
+            .filter_map(|it| match it {
+                Err(_) => None,
+                Ok(js_value) => js_value.as_f64().map(|num| num as u8),
+            })
+            .collect();
+        let dither_pattern_size = (dither_pattern.len() as f32).sqrt() as usize;
+
+        dither_halftone(vec, w, h, dither_pattern, dither_pattern_size)
+    })
 }

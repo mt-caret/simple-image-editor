@@ -127,6 +127,15 @@ const runConvolution = () => {
   downloadButton.disabled = false;
 };
 
+const generateDitherPattern = () => {
+  return [
+    0, 8, 2, 10,
+    12, 4, 14, 6,
+    3, 11, 1, 9,
+    15, 7, 13, 5
+  ];
+};
+
 const runLumaConversion = () => {
   const { wasm, canvases: { source, target }, copyButton, downloadButton } = model;
 
@@ -147,6 +156,15 @@ const runHalftoneConversion = () => {
   downloadButton.disabled = false;
 };
 
+const runDitherHalftone = () => {
+  const { wasm, canvases: { source, target }, copyButton, downloadButton  } = model;
+
+  const start = performance.now();
+  wasm.run_dither_halftone(source, target, model.ditherPattern);
+  console.log(performance.now() - start);
+  copyButton.disabled = false;
+  downloadButton.disabled = false;
+};
 
 const drawImage = (image) => {
   const { source, sourceCtx } = model.canvases;
@@ -188,6 +206,7 @@ const main = (wasm, memory) => {
     kernelType: 'sobelKernel',
     sigma: null,
     isVertical: false,
+    ditherPattern: generateDitherPattern(),
     canvases: {
       source: document.getElementById('sourceCanvas'),
       target: document.getElementById('targetCanvas'),
@@ -278,6 +297,11 @@ const main = (wasm, memory) => {
   const halftoneButton = document.getElementById('halftoneButton');
   halftoneButton.addEventListener('click', () => {
     setTimeout(runHalftoneConversion, 0);
+  });
+
+  const ditherButton = document.getElementById('ditherButton');
+  ditherButton.addEventListener('click', () => {
+    setTimeout(runDitherHalftone, 0);
   });
 
   const normalizeButton = document.getElementById('normalizeButton');
