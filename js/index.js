@@ -156,9 +156,13 @@ const handleImageUpload = (e) => {
 };
 
 const drawDefaultImage = () => {
+  model.convolveButton.disabled = true;
   const img = new Image();
+  img.onload = () => {
+    drawImage(img);
+    model.convolveButton.disabled = false;
+  };
   img.src = defaultImage;
-  drawImage(img);
 };
 
 const main = (wasm, memory) => {
