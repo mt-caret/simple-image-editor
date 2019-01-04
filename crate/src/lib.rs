@@ -103,10 +103,8 @@ pub fn convolve(source: Vec<u8>, w: u32, h: u32, kernel: &Kernel) -> Vec<u8> {
 }
 
 // c.f. https://en.wikipedia.org/wiki/Luma_%28video%29
-pub fn luma_convert(image_data: &ImageData) -> Vec<u8> {
-    let source = image_data.data().to_vec();
-    let mut target = Vec::with_capacity(source.len());
-    let (w, h) = (image_data.width(), image_data.height());
+pub fn luma_convert(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
+    let mut target = Vec::with_capacity(source.len() * 4);
 
     for y in 0..h {
         for x in 0..w {
@@ -179,15 +177,10 @@ pub fn run_convolution(
 
 #[wasm_bindgen]
 pub fn run_luma_conversion(
-    src_ctx: &CanvasRenderingContext2d,
-    target_ctx: &CanvasRenderingContext2d,
-    width: u32,
-    height: u32,
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
 ) -> Result<(), JsValue> {
-    let (w, h) = (width.into(), height.into());
-    let image_data = src_ctx.get_image_data(0.0, 0.0, w, h)?;
-    let mut result = luma_convert(&image_data);
-    let new_image_data =
-        ImageData::new_with_u8_clamped_array_and_sh(Clamped(&mut result), width, height)?;
-    target_ctx.put_image_data(&new_image_data, 0.0, 0.0)
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        (luma_convert(vec, w, h), w, h)
+    })
 }

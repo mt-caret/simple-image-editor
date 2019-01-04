@@ -128,17 +128,17 @@ const runConvolution = () => {
 };
 
 const runLumaConversion = () => {
-  const { wasm, canvases: { target, sourceCtx, targetCtx } } = model;
+  const { wasm, canvases: { source, target } } = model;
 
   const start = performance.now();
-  wasm.run_luma_conversion(sourceCtx, targetCtx, target.width, target.height);
+  wasm.run_luma_conversion(source, target);
   console.log(performance.now() - start);
 };
 
 const drawImage = (image) => {
-  const { source, target, sourceCtx } = model.canvases;
-  target.width = source.width = image.naturalWidth;
-  target.height = source.height = image.naturalHeight;
+  const { source, sourceCtx } = model.canvases;
+  source.width = image.naturalWidth;
+  source.height = image.naturalHeight;
   sourceCtx.drawImage(image, 0, 0);
 };
 
@@ -179,7 +179,6 @@ const main = (wasm, memory) => {
       source: document.getElementById('sourceCanvas'),
       target: document.getElementById('targetCanvas'),
       sourceCtx: null,
-      targetCtx: null,
     },
     convolveButton: document.getElementById('convolveButton'),
     copyButton: document.getElementById('copyButton'),
@@ -190,7 +189,6 @@ const main = (wasm, memory) => {
   model.kernel = generateKernel();
   model.customKernel = generateKernelFromFunction(model.kernelSize, () => 0);
   model.canvases.sourceCtx = model.canvases.source.getContext('2d');
-  model.canvases.targetCtx = model.canvases.target.getContext('2d');
   model.sigma = model.kernelSize / 2;
 
   drawDefaultImage();
@@ -231,6 +229,8 @@ const main = (wasm, memory) => {
   });
 
   model.copyButton.addEventListener('click', () => {
+    model.canvases.source.width =  model.canvases.target.width;
+    model.canvases.source.height = model.canvases.target.height;
     model.canvases.sourceCtx.drawImage(model.canvases.target, 0, 0);
   });
 
