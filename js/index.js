@@ -109,7 +109,7 @@ const runConvolution = () => {
     wasm,
     kernel,
     kernelSize,
-    canvases: { target, sourceCtx, targetCtx },
+    canvases: { source, target },
     convolveButton,
     copyButton,
     downloadButton,
@@ -119,7 +119,7 @@ const runConvolution = () => {
   const start = performance.now();
 
   let kernelHandle = applyKernel(kernel, kernelSize)
-  wasm.run_convolution(sourceCtx, targetCtx, target.width, target.height, kernelHandle);
+  wasm.run_convolution(source, target, kernelHandle);
 
   console.log(performance.now() - start);
   convolveButton.disabled = false;

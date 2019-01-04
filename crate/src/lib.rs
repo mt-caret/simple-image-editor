@@ -1,11 +1,13 @@
 #[macro_use]
 extern crate cfg_if;
-extern crate web_sys;
+extern crate js_sys;
 extern crate wasm_bindgen;
+extern crate web_sys;
 
+use js_sys::Object;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::Clamped;
-use web_sys::{CanvasRenderingContext2d, ImageData};
+use wasm_bindgen::{Clamped, JsCast};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 cfg_if! {
     // When the `console_error_panic_hook` feature is enabled, we can call the
@@ -66,10 +68,9 @@ impl Kernel {
     }
 }
 
-pub fn convolve(image_data: &ImageData, kernel: &Kernel) -> Vec<u8> {
-    let source = image_data.data().to_vec();
+pub fn convolve(source: Vec<u8>, w: u32, h: u32, kernel: &Kernel) -> Vec<u8> {
     let mut target = Vec::with_capacity(source.len());
-    let (w, h) = (image_data.width() as isize, image_data.height() as isize);
+    let (w, h) = (w as isize, h as isize);
     let offset = kernel.size / 2;
 
     for y in 0..h {
@@ -136,20 +137,44 @@ pub fn init() {
     set_panic_hook();
 }
 
+fn get_context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, Object> {
+    canvas
+        .get_context("2d")?
+        .expect("Failed to unwrap CanvasRenderingContext2d")
+        .dyn_into()
+}
+
+fn run_image_conversion(
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
+    f: impl Fn(Vec<u8>, u32, u32) -> (Vec<u8>, u32, u32),
+) -> Result<(), JsValue> {
+    let (w, h) = (src_canvas.width(), src_canvas.height());
+    let src_ctx = get_context(src_canvas)?;
+    let image_vec = src_ctx
+        .get_image_data(0.0, 0.0, w as f64, h as f64)?
+        .data()
+        .to_vec();
+
+    let (mut new_image_vec, new_w, new_h) = f(image_vec, w, h);
+
+    target_canvas.set_width(new_w);
+    target_canvas.set_height(new_h);
+    let target_ctx = get_context(target_canvas)?;
+    let new_image_data =
+        ImageData::new_with_u8_clamped_array_and_sh(Clamped(&mut new_image_vec), new_w, new_h)?;
+    target_ctx.put_image_data(&new_image_data, 0.0, 0.0)
+}
+
 #[wasm_bindgen]
 pub fn run_convolution(
-    src_ctx: &CanvasRenderingContext2d,
-    target_ctx: &CanvasRenderingContext2d,
-    width: u32,
-    height: u32,
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
     kernel: &Kernel,
 ) -> Result<(), JsValue> {
-    let (w, h) = (width.into(), height.into());
-    let image_data = src_ctx.get_image_data(0.0, 0.0, w, h)?;
-    let mut result = convolve(&image_data, &kernel);
-    let new_image_data =
-        ImageData::new_with_u8_clamped_array_and_sh(Clamped(&mut result), width, height)?;
-    target_ctx.put_image_data(&new_image_data, 0.0, 0.0)
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        (convolve(vec, w, h, kernel), w, h)
+    })
 }
 
 #[wasm_bindgen]
