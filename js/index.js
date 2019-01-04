@@ -4,6 +4,16 @@ import defaultImage from '../image.jpg';
 
 let model = null;
 
+const writeSourceInfo = () => {
+  const { canvases: { source }, sourceInfo } = model
+  sourceInfo.innerText = `(${source.width}x${source.height})`
+};
+
+const writeTargetInfo = () => {
+  const { canvases: { target }, targetInfo } = model
+  targetInfo.innerText = `(${target.width}x${target.height})`
+};
+
 const generateKernelFromFunction = (kernelSize, f) => {
   return R.range(0, kernelSize).map(y => R.range(0, kernelSize).map(x => f(x, y)));
 };
@@ -122,6 +132,7 @@ const runConvolution = () => {
   wasm.run_convolution(source, target, kernelHandle);
 
   console.log(performance.now() - start);
+  writeTargetInfo();
   convolveButton.disabled = false;
   copyButton.disabled = false;
   downloadButton.disabled = false;
@@ -142,6 +153,7 @@ const runLumaConversion = () => {
   const start = performance.now();
   wasm.run_luma_conversion(source, target);
   console.log(performance.now() - start);
+  writeTargetInfo();
   copyButton.disabled = false;
   downloadButton.disabled = false;
 };
@@ -152,6 +164,7 @@ const runHalftoneConversion = () => {
   const start = performance.now();
   wasm.run_density_pattern_halftone(source, target);
   console.log(performance.now() - start);
+  writeTargetInfo();
   copyButton.disabled = false;
   downloadButton.disabled = false;
 };
@@ -162,6 +175,7 @@ const runDitherHalftone = () => {
   const start = performance.now();
   wasm.run_dither_halftone(source, target, model.ditherPattern);
   console.log(performance.now() - start);
+  writeTargetInfo();
   copyButton.disabled = false;
   downloadButton.disabled = false;
 };
@@ -170,6 +184,7 @@ const drawImage = (image) => {
   const { source, sourceCtx } = model.canvases;
   source.width = image.naturalWidth;
   source.height = image.naturalHeight;
+  writeSourceInfo();
   sourceCtx.drawImage(image, 0, 0);
 };
 
@@ -179,6 +194,7 @@ const handleImageUpload = (e) => {
     const img = new Image();
     img.onload = () => {
       drawImage(img);
+      model.defaultImage = img;
     };
     img.src = e.target.result;
   };
@@ -192,6 +208,7 @@ const drawDefaultImage = () => {
   img.onload = () => {
     drawImage(img);
     model.convolveButton.disabled = false;
+    model.defaultImage = img;
   };
   img.src = defaultImage;
 };
@@ -213,6 +230,9 @@ const main = (wasm, memory) => {
       sourceCtx: null,
       targetCtx: null,
     },
+    defaultImage: null,
+    sourceInfo: document.getElementById('sourceInfo'),
+    targetInfo: document.getElementById('targetInfo'),
     convolveButton: document.getElementById('convolveButton'),
     copyButton: document.getElementById('copyButton'),
     downloadButton: document.getElementById('downloadButton'),
@@ -265,6 +285,7 @@ const main = (wasm, memory) => {
   model.copyButton.addEventListener('click', () => {
     model.canvases.source.width =  model.canvases.target.width;
     model.canvases.source.height = model.canvases.target.height;
+    writeSourceInfo();
     model.canvases.sourceCtx.drawImage(model.canvases.target, 0, 0);
   });
 
@@ -302,6 +323,11 @@ const main = (wasm, memory) => {
   const ditherButton = document.getElementById('ditherButton');
   ditherButton.addEventListener('click', () => {
     setTimeout(runDitherHalftone, 0);
+  });
+
+  const resetButton = document.getElementById('resetButton');
+  resetButton.addEventListener('click', () => {
+    drawImage(model.defaultImage);
   });
 
   const normalizeButton = document.getElementById('normalizeButton');
