@@ -128,19 +128,23 @@ const runConvolution = () => {
 };
 
 const runLumaConversion = () => {
-  const { wasm, canvases: { source, target } } = model;
+  const { wasm, canvases: { source, target }, copyButton, downloadButton } = model;
 
   const start = performance.now();
   wasm.run_luma_conversion(source, target);
   console.log(performance.now() - start);
+  copyButton.disabled = false;
+  downloadButton.disabled = false;
 };
 
 const runHalftoneConversion = () => {
-  const { wasm, canvases: { source, target } } = model;
+  const { wasm, canvases: { source, target }, copyButton, downloadButton  } = model;
 
   const start = performance.now();
   wasm.run_density_pattern_halftone(source, target);
   console.log(performance.now() - start);
+  copyButton.disabled = false;
+  downloadButton.disabled = false;
 };
 
 
@@ -245,15 +249,25 @@ const main = (wasm, memory) => {
     model.canvases.sourceCtx.drawImage(model.canvases.target, 0, 0);
   });
 
+  // chrome workaround: c.f. https://stackoverflow.com/a/37151835
   model.downloadButton.addEventListener('click', () => {
-    const a = document.createElement('a');
-    a.download = "result.png";
-    a.href = model.canvases.target.toDataURL();
-    a.hidden = true;
+    model.downloadButton.disabled = true;
+    model.canvases.target.toBlob(blob => {
+      const a = document.createElement('a');
+      a.download = "result.png";
+      a.href = URL.createObjectURL(blob);
+      a.hidden = true;
+      a.onclick = () => {
+        requestAnimationFrame(() => {
+          URL.revokeObjectURL(a.href);
+        });
+      };
 
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      model.downloadButton.disabled = false;
+    });
   });
 
   const lumaButton = document.getElementById('lumaButton');
