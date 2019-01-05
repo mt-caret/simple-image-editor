@@ -177,18 +177,20 @@ pub fn dither_halftone(
     h: u32,
     pattern: Vec<u8>,
     pattern_size: usize,
-) -> (Vec<u8>, u32, u32) {
-    let (w, h) = (
-        w as usize / pattern_size * pattern_size,
-        h as usize / pattern_size * pattern_size,
-    );
+) -> Vec<u8> {
+    let (w, h) = (w as usize, h as usize);
     let mut target = vec![0; w * h * 4];
 
     for y in 0..(h / pattern_size) {
         for x in 0..(w / pattern_size) {
             for dy in 0..pattern_size {
                 for dx in 0..pattern_size {
-                    let index = ((y * pattern_size + dy) * w + x * pattern_size + dx) * 4;
+                    let new_y = y * pattern_size + dy;
+                    let new_x = x * pattern_size + dx;
+                    if new_y >= h || new_x >= w {
+                        continue;
+                    }
+                    let index = (new_y * w + new_x) * 4;
                     let luma_value = ((source[index] as f32) * 0.2126
                         + (source[index + 1] as f32) * 0.7152
                         + (source[index + 2] as f32) * 0.0722)
@@ -206,7 +208,7 @@ pub fn dither_halftone(
             }
         }
     }
-    (target, w as u32, h as u32)
+    target
 }
 
 #[wasm_bindgen]
@@ -291,6 +293,10 @@ pub fn run_dither_halftone(
             .collect();
         let dither_pattern_size = (dither_pattern.len() as f32).sqrt() as usize;
 
-        dither_halftone(vec, w, h, dither_pattern, dither_pattern_size)
+        (
+            dither_halftone(vec, w, h, dither_pattern, dither_pattern_size),
+            w,
+            h,
+        )
     })
 }
