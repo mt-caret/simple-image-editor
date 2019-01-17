@@ -158,6 +158,16 @@ const runMedianFilter = () => {
   enableCopyAndDownload();
 };
 
+const runGammaCorrection = () => {
+  const { wasm, canvases: { source, target } } = model;
+
+  const start = performance.now();
+  wasm.run_gamma_correction(source, target, model.gamma);
+  console.log(performance.now() - start);
+  writeTargetInfo();
+  enableCopyAndDownload();
+};
+
 const generateDitherPattern = () => {
   return [
     0, 8, 2, 10,
@@ -241,6 +251,7 @@ const main = (wasm, memory) => {
     sigma: null,
     isVertical: false,
     ditherPattern: generateDitherPattern(),
+    gamma: 2.2,
     canvases: {
       source: document.getElementById('sourceCanvas'),
       target: document.getElementById('targetCanvas'),
@@ -382,6 +393,19 @@ const main = (wasm, memory) => {
   const medianButton = document.getElementById('medianButton');
   medianButton.addEventListener('click', () => {
     setTimeout(runMedianFilter, 0);
+  });
+
+  const gammaInput = document.getElementById('gammaInput');
+  gammaInput.value = model.gamma;
+  gammaInput.addEventListener('input', () => {
+    const value = parseFloat(gammaInput.value);
+    if (isNaN(value) || model.gamma === value) return;
+    model.gamma = value;
+  });
+
+  const gammaButton = document.getElementById('gammaButton');
+  gammaButton.addEventListener('click', () => {
+    setTimeout(runGammaCorrection, 0);
   });
 };
 

@@ -76,6 +76,14 @@ impl Kernel {
     }
 }
 
+pub fn clamp(min_value: f32, max_value: f32, value: f32) -> f32 {
+    f32::max(min_value, f32::min(max_value, value))
+}
+
+pub fn to_pixel(value: f32) -> u8 {
+    clamp(0.0, 255.0, value) as u8
+}
+
 pub fn convolve(source: Vec<u8>, w: u32, h: u32, kernel: &Kernel) -> Vec<u8> {
     let mut target = Vec::with_capacity(source.len());
     let (w, h) = (w as isize, h as isize);
@@ -102,12 +110,26 @@ pub fn convolve(source: Vec<u8>, w: u32, h: u32, kernel: &Kernel) -> Vec<u8> {
                 }
             }
             for i in 0..3 {
-                target.push(rgb[i] as u8);
+                target.push(to_pixel(rgb[i]));
             }
             target.push(source[((y * w + x) * 4 + 3) as usize]);
         }
     }
     target
+}
+
+pub fn gamma_correction(source: Vec<u8>, weight: f32) -> Vec<u8> {
+    source
+        .into_iter()
+        .enumerate()
+        .map(|(i, val)| {
+            if i % 4 == 0 {
+                val
+            } else {
+                to_pixel((val as f32 / 255.0).powf(weight) * 255.0)
+            }
+        })
+        .collect()
 }
 
 pub fn median_filter(source: Vec<u8>, w: u32, h: u32, filter_size: usize) -> Vec<u8> {
@@ -149,9 +171,11 @@ pub fn luma_convert(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
     for y in 0..h {
         for x in 0..w {
             let base_index = ((y * w + x) * 4) as usize;
-            let luma_value = ((source[base_index] as f32) * 0.2126
-                + (source[base_index + 1] as f32) * 0.7152
-                + (source[base_index + 2] as f32) * 0.0722) as u8;
+            let luma_value = to_pixel(
+                (source[base_index] as f32) * 0.2126
+                    + (source[base_index + 1] as f32) * 0.7152
+                    + (source[base_index + 2] as f32) * 0.0722,
+            );
             target.push(luma_value);
             target.push(luma_value);
             target.push(luma_value);
@@ -178,10 +202,11 @@ pub fn density_pattern_halftone(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
     for y in 0..h {
         for x in 0..w {
             let source_base_index = ((y * w + x) * 4) as usize;
-            let luma_value = ((source[source_base_index] as f32) * 0.2126
-                + (source[source_base_index + 1] as f32) * 0.7152
-                + (source[source_base_index + 2] as f32) * 0.0722)
-                as u8;
+            let luma_value = to_pixel(
+                (source[source_base_index] as f32) * 0.2126
+                    + (source[source_base_index + 1] as f32) * 0.7152
+                    + (source[source_base_index + 2] as f32) * 0.0722,
+            );
             // this converts 0~255 to 0~17
             let density_pattern = DENSITY_PATTERNS[(luma_value as f32 / 16.0).round() as usize];
             for dy in 0..4 {
@@ -223,10 +248,11 @@ pub fn dither_halftone(
                         continue;
                     }
                     let index = (new_y * w + new_x) * 4;
-                    let luma_value = ((source[index] as f32) * 0.2126
-                        + (source[index + 1] as f32) * 0.7152
-                        + (source[index + 2] as f32) * 0.0722)
-                        as u8;
+                    let luma_value = to_pixel(
+                        (source[index] as f32) * 0.2126
+                            + (source[index + 1] as f32) * 0.7152
+                            + (source[index + 2] as f32) * 0.0722,
+                    );
                     let color_value = if pattern[dy * 4 + dx] * 16 + 8 < luma_value {
                         255
                     } else {
@@ -285,6 +311,17 @@ pub fn run_convolution(
 ) -> Result<(), JsValue> {
     run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
         (convolve(vec, w, h, kernel), w, h)
+    })
+}
+
+#[wasm_bindgen]
+pub fn run_gamma_correction(
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
+    weight: f32,
+) -> Result<(), JsValue> {
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        (gamma_correction(vec, weight), w, h)
     })
 }
 
