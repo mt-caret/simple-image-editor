@@ -2,7 +2,20 @@ import * as R from 'ramda';
 
 import defaultImage from '../image.jpg';
 
+const setLoading = (button) => {
+  button.classList.add('is-loading');
+}
+
+const setDone = (button) => {
+  button.classList.remove('is-loading');
+}
+
 let model = null;
+
+const enableCopyAndDownload = () => {
+  model.copyButton.disabled = false;
+  model.downloadButton.disabled = false;
+}
 
 const writeSourceInfo = () => {
   const { canvases: { source }, sourceInfo } = model
@@ -121,11 +134,9 @@ const runConvolution = () => {
     kernelSize,
     canvases: { source, target },
     convolveButton,
-    copyButton,
-    downloadButton,
   } = model;
 
-  convolveButton.disabled = true;
+  setLoading(convolveButton);
   const start = performance.now();
 
   let kernelHandle = applyKernel(kernel, kernelSize)
@@ -133,9 +144,8 @@ const runConvolution = () => {
 
   console.log(performance.now() - start);
   writeTargetInfo();
-  convolveButton.disabled = false;
-  copyButton.disabled = false;
-  downloadButton.disabled = false;
+  setDone(convolveButton);
+  enableCopyAndDownload();
 };
 
 const generateDitherPattern = () => {
@@ -148,36 +158,33 @@ const generateDitherPattern = () => {
 };
 
 const runLumaConversion = () => {
-  const { wasm, canvases: { source, target }, copyButton, downloadButton } = model;
+  const { wasm, canvases: { source, target } } = model;
 
   const start = performance.now();
   wasm.run_luma_conversion(source, target);
   console.log(performance.now() - start);
   writeTargetInfo();
-  copyButton.disabled = false;
-  downloadButton.disabled = false;
+  enableCopyAndDownload();
 };
 
 const runHalftoneConversion = () => {
-  const { wasm, canvases: { source, target }, copyButton, downloadButton  } = model;
+  const { wasm, canvases: { source, target } } = model;
 
   const start = performance.now();
   wasm.run_density_pattern_halftone(source, target);
   console.log(performance.now() - start);
   writeTargetInfo();
-  copyButton.disabled = false;
-  downloadButton.disabled = false;
+  enableCopyAndDownload();
 };
 
 const runDitherHalftone = () => {
-  const { wasm, canvases: { source, target }, copyButton, downloadButton  } = model;
+  const { wasm, canvases: { source, target } } = model;
 
   const start = performance.now();
   wasm.run_dither_halftone(source, target, model.ditherPattern);
   console.log(performance.now() - start);
   writeTargetInfo();
-  copyButton.disabled = false;
-  downloadButton.disabled = false;
+  enableCopyAndDownload();
 };
 
 const drawImage = (image) => {
@@ -291,7 +298,7 @@ const main = (wasm, memory) => {
 
   // chrome workaround: c.f. https://stackoverflow.com/a/37151835
   model.downloadButton.addEventListener('click', () => {
-    model.downloadButton.disabled = true;
+    setLoading(model.downloadButton);
     model.canvases.target.toBlob(blob => {
       const a = document.createElement('a');
       a.download = "result.png";
@@ -306,7 +313,7 @@ const main = (wasm, memory) => {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      model.downloadButton.disabled = false;
+      setDone(model.downloadButton);
     });
   });
 
