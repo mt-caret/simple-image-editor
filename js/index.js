@@ -148,6 +148,16 @@ const runConvolution = () => {
   enableCopyAndDownload();
 };
 
+const runMedianFilter = () => {
+  const { wasm, canvases: { source, target } } = model;
+
+  const start = performance.now();
+  wasm.run_median_filter(source, target, model.kernelSize);
+  console.log(performance.now() - start);
+  writeTargetInfo();
+  enableCopyAndDownload();
+};
+
 const generateDitherPattern = () => {
   return [
     0, 8, 2, 10,
@@ -367,6 +377,11 @@ const main = (wasm, memory) => {
     model.sigma = value;
     model.kernel = generateKernel();
     writeKernelToDom();
+  });
+
+  const medianButton = document.getElementById('medianButton');
+  medianButton.addEventListener('click', () => {
+    setTimeout(runMedianFilter, 0);
   });
 };
 
