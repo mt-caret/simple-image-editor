@@ -240,6 +240,20 @@ const drawDefaultImage = () => {
   img.src = defaultImage;
 };
 
+const listenForCanvasClick = (canvas) => {
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect()
+    const x = Math.round((e.clientX - rect.left) * canvas.width / rect.width);
+    const y = Math.round((e.clientY - rect.top) * canvas.height / rect.height);
+    console.log(`(${x}, ${y})`);
+    model.pointList.push({ x, y });
+    while (model.pointList.length > 4) {
+      model.pointList.shift();
+    }
+    console.log(model.pointList);
+  });
+};
+
 const main = (wasm, memory) => {
   model = {
     wasm,
@@ -252,6 +266,7 @@ const main = (wasm, memory) => {
     isVertical: false,
     ditherPattern: generateDitherPattern(),
     gamma: 2.2,
+    pointList: [],
     canvases: {
       source: document.getElementById('sourceCanvas'),
       target: document.getElementById('targetCanvas'),
@@ -275,6 +290,7 @@ const main = (wasm, memory) => {
 
   drawDefaultImage();
   writeKernelToDom();
+  listenForCanvasClick(model.canvases.source);
 
   allKernels.forEach((kernelName) => {
     const radioButton = document.getElementById(kernelName);
@@ -336,6 +352,25 @@ const main = (wasm, memory) => {
       document.body.removeChild(a);
       setDone(model.downloadButton);
     });
+  });
+
+  const projectButton = document.getElementById('projectButton');
+  projectButton.addEventListener('click', () => {
+    setTimeout(() => {
+      const x = model.pointList.map(({x}) => x);
+      const y = model.pointList.map(({y}) => y);
+      const w = model.canvases.source.width;
+      const h = model.canvases.source.height;
+      const nx = [0, w, 0, w];
+      const ny = [0, 0, h, h];
+      if (model.pointList.length === 4) {
+        const start = performance.now();
+        model.wasm.run_projection(model.canvases.source, model.canvases.target, nx, ny, x, y);
+        console.log(performance.now() - start);
+        writeTargetInfo();
+        enableCopyAndDownload();
+      }
+    }, 0);
   });
 
   const lumaButton = document.getElementById('lumaButton');

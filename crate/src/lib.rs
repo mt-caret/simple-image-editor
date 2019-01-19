@@ -5,11 +5,17 @@ extern crate wasm_bindgen;
 extern crate web_sys;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate rulinalg;
 
-use js_sys::{Array, Object};
+use std::ops::Mul;
+
+use js_sys::Object;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
+
+use rulinalg::matrix::Matrix;
 
 macro_rules! log {
     ( $( $t:tt )* ) => {
@@ -37,6 +43,35 @@ cfg_if! {
         #[global_allocator]
         static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
     }
+}
+
+// c.f. https://math.stackexchange.com/a/2619023
+pub fn calculate_homography_matrix(x: &[f32], y: &[f32], nx: &[f32], ny: &[f32]) -> Matrix<f32> {
+    let p = matrix![
+        -x[0], -y[0], -1.0, 0.0, 0.0, 0.0, x[0]*nx[0], y[0]*nx[0], nx[0];
+        0.0, 0.0, 0.0, -x[0], -y[0], -1.0, x[0]*ny[0], y[0]*ny[0], ny[0];
+        -x[1], -y[1], -1.0, 0.0, 0.0, 0.0, x[1]*nx[1], y[1]*nx[1], nx[1];
+        0.0, 0.0, 0.0, -x[1], -y[1], -1.0, x[1]*ny[1], y[1]*ny[1], ny[1];
+        -x[2], -y[2], -1.0, 0.0, 0.0, 0.0, x[2]*nx[2], y[2]*nx[2], nx[2];
+        0.0, 0.0, 0.0, -x[2], -y[2], -1.0, x[2]*ny[2], y[2]*ny[2], ny[2];
+        -x[3], -y[3], -1.0, 0.0, 0.0, 0.0, x[3]*nx[3], y[3]*nx[3], nx[3];
+        0.0, 0.0, 0.0, -x[3], -y[3], -1.0, x[3]*ny[3], y[3]*ny[3], ny[3];
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0
+    ];
+    let b = vector![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+    let h_vec = p.solve(b).unwrap();
+    let h_matrix = matrix![
+        h_vec[0], h_vec[1], h_vec[2];
+        h_vec[3], h_vec[4], h_vec[5];
+        h_vec[6], h_vec[7], h_vec[8]
+    ];
+    log!("{:?}", h_matrix);
+    h_matrix
+}
+
+#[wasm_bindgen]
+pub fn run_calculate_homography_matrix(x: &[f32], y: &[f32], nx: &[f32], ny: &[f32]) -> Vec<f32> {
+    calculate_homography_matrix(x, y, nx, ny).into_vec()
 }
 
 // Called by our JS entry point to run the example.
@@ -284,7 +319,7 @@ fn get_context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, O
 fn run_image_conversion(
     src_canvas: &HtmlCanvasElement,
     target_canvas: &HtmlCanvasElement,
-    f: impl Fn(Vec<u8>, u32, u32) -> (Vec<u8>, u32, u32),
+    f: impl FnOnce(Vec<u8>, u32, u32) -> (Vec<u8>, u32, u32),
 ) -> Result<(), JsValue> {
     let (w, h) = (src_canvas.width(), src_canvas.height());
     let src_ctx = get_context(src_canvas)?;
@@ -360,17 +395,9 @@ pub fn run_density_pattern_halftone(
 pub fn run_dither_halftone(
     src_canvas: &HtmlCanvasElement,
     target_canvas: &HtmlCanvasElement,
-    dither_pattern_array: &Array,
+    dither_pattern: Vec<u8>,
 ) -> Result<(), JsValue> {
     run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
-        let dither_pattern: Vec<_> = dither_pattern_array
-            .values()
-            .into_iter()
-            .filter_map(|it| match it {
-                Err(_) => None,
-                Ok(js_value) => js_value.as_f64().map(|num| num as u8),
-            })
-            .collect();
         let dither_pattern_size = (dither_pattern.len() as f32).sqrt() as usize;
 
         (
@@ -378,5 +405,66 @@ pub fn run_dither_halftone(
             w,
             h,
         )
+    })
+}
+
+pub fn project_coords(x: usize, y: usize, h_matrix: &Matrix<f32>) -> (usize, usize) {
+    let res = h_matrix
+        .clone()
+        .mul(vector![x as f32, y as f32, 1.0])
+        .into_vec();
+    (
+        f32::max(0.0, res[0] / res[2]) as usize,
+        f32::max(0.0, res[1] / res[2]) as usize,
+    )
+}
+
+pub fn project_coords_alt(x: usize, y: usize, h_matrix: &Matrix<f32>) -> (usize, usize) {
+    let (x, y) = (x as f32, y as f32);
+    let nx = x * h_matrix[[0, 0]] + y * h_matrix[[0, 1]] + h_matrix[[0, 2]];
+    let ny = x * h_matrix[[1, 0]] + y * h_matrix[[1, 1]] + h_matrix[[1, 2]];
+    let s = x * h_matrix[[2, 0]] + y * h_matrix[[2, 1]] + h_matrix[[2, 2]];
+    (
+        f32::max(0.0, nx / s) as usize,
+        f32::max(0.0, ny / s) as usize,
+    )
+}
+
+pub fn projection(source: Vec<u8>, w: u32, h: u32, h_matrix: Matrix<f32>) -> Vec<u8> {
+    let (w, h) = (w as usize, h as usize);
+    let mut target = Vec::with_capacity(source.len());
+
+    let (a, b) = project_coords(0, 0, &h_matrix);
+    log!("({}, {}) -> ({}, {})", 0, 0, a, b);
+    let (a, b) = project_coords(w, h, &h_matrix);
+    log!("({}, {}) -> ({}, {})", w, h, a, b);
+
+    for y in 0..h {
+        for x in 0..w {
+            let (old_x, old_y) = project_coords_alt(x, y, &h_matrix);
+            let old_x = usize::min(w - 1, old_x);
+            let old_y = usize::min(h - 1, old_y);
+            let base_index = (old_y * w + old_x) * 4;
+            for i in 0..3 {
+                target.push(source[base_index + i]);
+            }
+            target.push(source[base_index + 3]);
+        }
+    }
+    target
+}
+
+#[wasm_bindgen]
+pub fn run_projection(
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
+    x: &[f32],
+    y: &[f32],
+    nx: &[f32],
+    ny: &[f32],
+) -> Result<(), JsValue> {
+    let h_matrix = calculate_homography_matrix(x, y, nx, ny);
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        (projection(vec, w, h, h_matrix), w, h)
     })
 }
