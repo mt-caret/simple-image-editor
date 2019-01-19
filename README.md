@@ -4,4 +4,3 @@ WIP
 
 todos:
 - show progress?
-- preserve resolution for dither halftone
