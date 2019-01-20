@@ -539,7 +539,13 @@ pub fn sample(min_value: usize, max_value: usize, n: usize, seed: u64) -> Vec<us
     indices
 }
 
-pub fn image_segmentation(source: Vec<u8>, w: u32, h: u32, k: usize) -> Vec<u8> {
+pub fn image_segmentation(
+    source: Vec<u8>,
+    w: u32,
+    h: u32,
+    k: usize,
+    location_weight: f32,
+) -> Vec<u8> {
     let mut patterns = Vec::with_capacity((w * h) as usize);
 
     for y in 0..h {
@@ -548,7 +554,13 @@ pub fn image_segmentation(source: Vec<u8>, w: u32, h: u32, k: usize) -> Vec<u8> 
             let r = source[base_index] as f32;
             let g = source[base_index + 1] as f32;
             let b = source[base_index + 2] as f32;
-            patterns.push(Pattern(r, g, b, x as f32, y as f32));
+            patterns.push(Pattern(
+                r,
+                g,
+                b,
+                x as f32 * location_weight * 255.0 / w as f32,
+                y as f32 * location_weight * 255.0 / h as f32,
+            ));
         }
     }
 
@@ -628,7 +640,7 @@ pub fn run_image_segmentation(
     k: usize,
 ) -> Result<(), JsValue> {
     run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
-        (image_segmentation(vec, w, h, k), w, h)
+        (image_segmentation(vec, w, h, k, 1.0), w, h)
     })
 }
 
