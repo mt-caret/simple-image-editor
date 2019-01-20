@@ -7,15 +7,15 @@ extern crate web_sys;
 extern crate lazy_static;
 #[macro_use]
 extern crate rulinalg;
-
-use std::ops::Mul;
+extern crate rand;
 
 use js_sys::Object;
+use rand::prelude::*;
+use rulinalg::matrix::Matrix;
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::{Clamped, JsCast};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
-
-use rulinalg::matrix::Matrix;
 
 macro_rules! log {
     ( $( $t:tt )* ) => {
@@ -452,6 +452,184 @@ pub fn projection(source: Vec<u8>, w: u32, h: u32, h_matrix: Matrix<f32>) -> Vec
         }
     }
     target
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Pattern(f32, f32, f32, f32, f32);
+impl AddAssign for Pattern {
+    fn add_assign(&mut self, other: Pattern) {
+        *self = Pattern(
+            self.0 + other.0,
+            self.1 + other.1,
+            self.2 + other.2,
+            self.3 + other.3,
+            self.4 + other.4,
+        );
+    }
+}
+
+impl Add<Pattern> for Pattern {
+    type Output = Pattern;
+    fn add(self, other: Pattern) -> Self {
+        Pattern(
+            self.0 / other.0,
+            self.1 / other.1,
+            self.2 / other.2,
+            self.3 / other.3,
+            self.4 / other.4,
+        )
+    }
+}
+
+impl Div<f32> for Pattern {
+    type Output = Pattern;
+    fn div(self, other: f32) -> Self {
+        Pattern(
+            self.0 / other,
+            self.1 / other,
+            self.2 / other,
+            self.3 / other,
+            self.4 / other,
+        )
+    }
+}
+
+impl DivAssign<f32> for Pattern {
+    fn div_assign(&mut self, other: f32) {
+        *self = Pattern(
+            self.0 / other,
+            self.1 / other,
+            self.2 / other,
+            self.3 / other,
+            self.4 / other,
+        );
+    }
+}
+
+pub fn distance(a: &Pattern, b: &Pattern) -> f32 {
+    (a.0 - b.0).powi(2)
+        + (a.1 - b.1).powi(2)
+        + (a.2 - b.2).powi(2)
+        + (a.3 - b.3).powi(2)
+        + (a.4 - b.4).powi(2)
+}
+
+pub fn min_arg(arr: &[f32]) -> usize {
+    let mut max_value = std::f32::MAX;
+    let mut index = std::usize::MAX;
+    for i in 0..arr.len() {
+        if max_value > arr[i] {
+            max_value = arr[i];
+            index = i;
+        }
+    }
+    index
+}
+
+pub fn sample(min_value: usize, max_value: usize, n: usize, seed: u64) -> Vec<usize> {
+    let mut rng: StdRng = SeedableRng::seed_from_u64(seed);
+    let mut indices = Vec::with_capacity(n);
+
+    while indices.len() < n {
+        let new_index = rng.gen_range(min_value, max_value);
+        if !indices.contains(&new_index) {
+            indices.push(new_index);
+        }
+    }
+    indices
+}
+
+pub fn image_segmentation(source: Vec<u8>, w: u32, h: u32, k: usize) -> Vec<u8> {
+    let mut patterns = Vec::with_capacity((w * h) as usize);
+
+    for y in 0..h {
+        for x in 0..w {
+            let base_index = ((y * w + x) * 4) as usize;
+            let r = source[base_index] as f32;
+            let g = source[base_index + 1] as f32;
+            let b = source[base_index + 2] as f32;
+            patterns.push(Pattern(r, g, b, x as f32, y as f32));
+        }
+    }
+
+    let mut centroids: Vec<Pattern> = sample(0, patterns.len(), k, 10)
+        .iter()
+        .map(|&i| patterns[i])
+        .collect();
+
+    for _ in 0..5 {
+        let mut cluster_sizes = vec![0; k];
+        let mut new_centroids = vec![Pattern(0.0, 0.0, 0.0, 0.0, 0.0); k];
+
+        for i in 0..patterns.len() {
+            let distances: Vec<_> = centroids
+                .iter()
+                .map(|centroid| distance(&patterns[i], centroid))
+                .collect();
+            let index = min_arg(&distances);
+            cluster_sizes[index] += 1;
+            new_centroids[index] += patterns[i];
+        }
+
+        for i in 0..k {
+            assert_ne!(cluster_sizes[i], 0);
+            new_centroids[i] /= cluster_sizes[i] as f32;
+        }
+
+        centroids = new_centroids;
+    }
+
+    let mut cluster_colors = vec![(0.0, 0.0, 0.0); k];
+    let mut cluster_sizes = vec![0; k];
+    let clusters: Vec<usize> = patterns
+        .iter()
+        .map(|pattern| {
+            let distances: Vec<_> = centroids
+                .iter()
+                .map(|centroid| distance(&pattern, centroid))
+                .collect();
+            let index = min_arg(&distances);
+            cluster_sizes[index] += 1;
+            cluster_colors[index].0 += pattern.0;
+            cluster_colors[index].1 += pattern.1;
+            cluster_colors[index].2 += pattern.2;
+            index
+        })
+        .collect();
+
+    for i in 0..k {
+        cluster_colors[i].0 = cluster_colors[i].0 / cluster_sizes[i] as f32;
+        cluster_colors[i].1 = cluster_colors[i].1 / cluster_sizes[i] as f32;
+        cluster_colors[i].2 = cluster_colors[i].2 / cluster_sizes[i] as f32;
+    }
+
+    log!("cluster_colors: {:?}", cluster_colors);
+
+    let mut target = Vec::with_capacity(source.len());
+
+    for y in 0..h {
+        for x in 0..w {
+            let base_index = (y * w + x) as usize;
+            let color = cluster_colors[clusters[base_index]];
+            target.push(clamp(0.0, 255.0, color.0) as u8);
+            target.push(clamp(0.0, 255.0, color.1) as u8);
+            target.push(clamp(0.0, 255.0, color.2) as u8);
+            target.push(source[base_index * 4 + 3]);
+        }
+    }
+
+    target
+}
+
+#[wasm_bindgen]
+pub fn run_image_segmentation(
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
+    k: usize,
+) -> Result<(), JsValue> {
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        (image_segmentation(vec, w, h, k), w, h)
+    })
 }
 
 #[wasm_bindgen]

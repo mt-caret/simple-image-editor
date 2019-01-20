@@ -260,6 +260,7 @@ const main = (wasm, memory) => {
     memory,
     kernel: null,
     customKernel: null,
+    kmeans: 10,
     kernelSize: 3,
     kernelType: 'sobelKernel',
     sigma: null,
@@ -370,6 +371,26 @@ const main = (wasm, memory) => {
         writeTargetInfo();
         enableCopyAndDownload();
       }
+    }, 0);
+  });
+
+  const kmeansInput = document.getElementById('kmeansInput');
+  kmeansInput.value = model.kmeans;
+  kmeansInput.addEventListener('input', () => {
+    const value = parseInt(kmeansInput.value);
+    if (isNaN(value) || model.kmeans === value) return;
+    model.kmeans = value;
+  });
+
+  const kmeansButton = document.getElementById('kmeansButton');
+  kmeansButton.addEventListener('click', () => {
+    let k = model.kmeans;
+    setTimeout(() => {
+        const start = performance.now();
+        model.wasm.run_image_segmentation(model.canvases.source, model.canvases.target, k);
+        console.log(performance.now() - start);
+        writeTargetInfo();
+        enableCopyAndDownload();
     }, 0);
   });
 
