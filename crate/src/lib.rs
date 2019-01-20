@@ -7,9 +7,11 @@ extern crate web_sys;
 extern crate lazy_static;
 #[macro_use]
 extern crate rulinalg;
+extern crate palette;
 extern crate rand;
 
 use js_sys::Object;
+use palette::{Hsv, IntoColor, RgbHue, Srgb};
 use rand::prelude::*;
 use rulinalg::matrix::Matrix;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul};
@@ -158,7 +160,7 @@ pub fn gamma_correction(source: Vec<u8>, weight: f32) -> Vec<u8> {
         .into_iter()
         .enumerate()
         .map(|(i, val)| {
-            if i % 4 == 0 {
+            if i % 4 == 3 {
                 val
             } else {
                 to_pixel((val as f32 / 255.0).powf(weight) * 255.0)
@@ -302,6 +304,74 @@ pub fn dither_halftone(
         }
     }
     target
+}
+
+pub fn rgb_to_hsv(r: f32, g: f32, b: f32) -> (RgbHue, f32, f32) {
+    let res: Hsv = Srgb::new(r / 255.0, g / 255.0, b / 255.0).into_hsv();
+    (res.hue, res.saturation, res.value)
+}
+
+pub fn hsv_to_rgb(h: RgbHue, s: f32, v: f32) -> (f32, f32, f32) {
+    let res = Srgb::from_linear(Hsv::new(h, s, v).into_rgb());
+    (res.red * 255.0, res.green * 255.0, res.blue * 255.0)
+}
+
+pub fn histogram_equalization(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
+    let mut hsv_pixels = Vec::with_capacity((w * h) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            let base_index = ((y * w + x) * 4) as usize;
+            let r = source[base_index] as f32;
+            let g = source[base_index + 1] as f32;
+            let b = source[base_index + 2] as f32;
+            hsv_pixels.push(rgb_to_hsv(r, g, b));
+        }
+    }
+
+    let values: Vec<_> = hsv_pixels
+        .iter()
+        .map(|pixel| (pixel.2 * 255.0) as u8)
+        .collect();
+    let max_value_in_img = values.iter().cloned().max().unwrap() as f32 / 255.0;
+    let min_value_in_img = values.iter().cloned().min().unwrap() as f32 / 255.0;
+
+    let mut cdf = vec![0usize; 256];
+    for i in 0..hsv_pixels.len() {
+        cdf[(hsv_pixels[i].2 * 255.0) as usize] += 1;
+    }
+    for i in 1..256 {
+        cdf[i] += cdf[i - 1];
+    }
+
+    let cdf: Vec<_> = cdf
+        .into_iter()
+        .map(|v| v as f32 / hsv_pixels.len() as f32)
+        .collect();
+    log!("{:?}", cdf);
+
+    let mut target = Vec::with_capacity(source.len());
+    for y in 0..h {
+        for x in 0..w {
+            let base_index = (y * w + x) as usize;
+            let (h, s, v) = hsv_pixels[base_index];
+            let (r, g, b) = hsv_to_rgb(h, s, cdf[(v * 255.0) as usize]);
+            target.push(r as u8);
+            target.push(g as u8);
+            target.push(b as u8);
+            target.push(source[base_index * 4 + 3]);
+        }
+    }
+    target
+}
+
+#[wasm_bindgen]
+pub fn run_histogram_equalization(
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
+) -> Result<(), JsValue> {
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        (histogram_equalization(vec, w, h), w, h)
+    })
 }
 
 #[wasm_bindgen]
@@ -569,7 +639,7 @@ pub fn image_segmentation(
         .map(|&i| patterns[i])
         .collect();
 
-    for _ in 0..5 {
+    for _ in 0..10 {
         let mut cluster_sizes = vec![0; k];
         let mut new_centroids = vec![Pattern(0.0, 0.0, 0.0, 0.0, 0.0); k];
 

@@ -394,6 +394,19 @@ const main = (wasm, memory) => {
     }, 0);
   });
 
+
+  const histogramEqualizationButton = document.getElementById('histogramEqualizationButton');
+  histogramEqualizationButton.addEventListener('click', () => {
+    setTimeout(() => {
+        const start = performance.now();
+        model.wasm.run_histogram_equalization(model.canvases.source, model.canvases.target);
+        console.log(performance.now() - start);
+        writeTargetInfo();
+        enableCopyAndDownload();
+    }, 0);
+  });
+
+
   const lumaButton = document.getElementById('lumaButton');
   lumaButton.addEventListener('click', () => {
     setTimeout(runLumaConversion, 0);
