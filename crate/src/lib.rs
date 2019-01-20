@@ -201,6 +201,51 @@ pub fn median_filter(source: Vec<u8>, w: u32, h: u32, filter_size: usize) -> Vec
     target
 }
 
+pub fn bilateral_filter(
+    source: Vec<u8>,
+    w: u32,
+    h: u32,
+    filter_size: usize,
+    sigma: f32,
+) -> Vec<u8> {
+    let mut target = Vec::with_capacity(source.len());
+    let (w, h) = (w as isize, h as isize);
+    let offset = filter_size / 2;
+
+    for y in 0..h {
+        for x in 0..w {
+            for i in 0..3 {
+                let mut wf_sum = 0.0;
+                let mut w_sum = 0.0;
+                for dy in 0..(filter_size as isize) {
+                    let ny = y + dy - offset as isize;
+                    if ny < 0 || ny >= h {
+                        continue;
+                    }
+                    for dx in 0..(filter_size as isize) {
+                        let nx = x + dx - offset as isize;
+                        if nx < 0 || nx >= w {
+                            continue;
+                        }
+                        let base_index = ((y * w + x) * 4 + i) as usize;
+                        let base_index_alt = ((ny * w + nx) * 4 + i) as usize;
+                        let w = ((-(dx * dx) as f32 - (dy * dy) as f32) / (2.0 * sigma * sigma))
+                            .exp()
+                            * (-((source[base_index] - source[base_index_alt]) as f32).powi(2)
+                                / (2.0 * sigma * sigma))
+                                .exp();
+                        wf_sum += w * source[base_index_alt] as f32;
+                        w_sum += w;
+                    }
+                }
+                target.push(clamp(0.0, 255.0, wf_sum / w_sum) as u8);
+            }
+            target.push(source[((y * w + x) * 4 + 3) as usize]);
+        }
+    }
+    target
+}
+
 // c.f. https://en.wikipedia.org/wiki/Luma_%28video%29
 pub fn luma_convert(source: Vec<u8>, w: u32, h: u32) -> Vec<u8> {
     let mut target = Vec::with_capacity(source.len());
@@ -438,6 +483,18 @@ pub fn run_median_filter(
 ) -> Result<(), JsValue> {
     run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
         (median_filter(vec, w, h, filter_size), w, h)
+    })
+}
+
+#[wasm_bindgen]
+pub fn run_bilateral_filter(
+    src_canvas: &HtmlCanvasElement,
+    target_canvas: &HtmlCanvasElement,
+    filter_size: usize,
+    sigma: f32,
+) -> Result<(), JsValue> {
+    run_image_conversion(src_canvas, target_canvas, |vec, w, h| {
+        (bilateral_filter(vec, w, h, filter_size, sigma), w, h)
     })
 }
 

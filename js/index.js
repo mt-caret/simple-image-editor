@@ -158,6 +158,16 @@ const runMedianFilter = () => {
   enableCopyAndDownload();
 };
 
+const runBilateralFilter = () => {
+  const { wasm, canvases: { source, target } } = model;
+
+  const start = performance.now();
+  wasm.run_bilateral_filter(source, target, model.kernelSize, model.sigma);
+  console.log(performance.now() - start);
+  writeTargetInfo();
+  enableCopyAndDownload();
+};
+
 const runGammaCorrection = () => {
   const { wasm, canvases: { source, target } } = model;
 
@@ -462,6 +472,11 @@ const main = (wasm, memory) => {
   const medianButton = document.getElementById('medianButton');
   medianButton.addEventListener('click', () => {
     setTimeout(runMedianFilter, 0);
+  });
+
+  const bilateralButton = document.getElementById('bilateralButton');
+  bilateralButton.addEventListener('click', () => {
+    setTimeout(runBilateralFilter, 0);
   });
 
   const gammaInput = document.getElementById('gammaInput');
